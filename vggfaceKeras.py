@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from keras.models import Model, Sequential
 from keras.layers import Input, Convolution2D, ZeroPadding2D, MaxPooling2D, Flatten, Dense, Dropout, Activation
 import cv2
@@ -96,12 +97,12 @@ model.add(MaxPooling2D((2,2), strides=(2,2)))
 
 
 '''
-The idea of dropout is simplistic in nature. This layer “drops out” a random set of activations in
+The idea of dropout is simplistic in nature. This layer drops out a random set of activations in
 that layer by setting them to zero. it forces the network to be redundant. By that I mean the network
 should be able to provide the right classification or output for a specific example even if some of
-the activations are dropped out. It makes sure that the network isn’t getting too “fitted” to the
+the activations are dropped out. It makes sure that the network isn’t getting too fitted to the
 training data and thus helps alleviate the overfitting problem. An important note is that this layer
-is only used during training, and not during test time.
+is only used during training and not during test time.
 '''
 
 '''
@@ -151,9 +152,80 @@ model.add(Convolution2D(2622, (1, 1)))
 model.add(Flatten())
 model.add(Activation('softmax'))
 
+'''
+We will load the pretrained weights
+'''
+from keras.models import model_from_json
+model.load_weights('vgg_face_weights.h5')
+
+"""
+we’ll use previous layer of the output layer for representation.
+The following usage will give output of that layer.
+"""
+# layers[-2] represents the second last layer of the model
+vgg_face_descriptor = Model(inputs=model.layers[0].input, outputs=model.layers[-2].output)
+
+'''
+We can represent images 2622 dimensional vector as below
+VGG model expects 224x224x3 sized input images. Here, 3rd dimension refers to number of channels or
+RGB colors
+'''
+
+# Method to resize the image as the model expects 224x224x3 images
 
 
+def preprocess_image(image_path):
+    img = load_img(image_path, target_size=(224, 224))
+    img = img_to_array(img)
+    img = np.expand_dims(img, axis=0)
+    img = preprocess_input(img)
+    return img
 
 
+"""
+We’ve represented input images as vectors. We will decide both pictures are same person or not based
+on comparing these vector representations. Now, we need to find the distance of these vectors. There
+are two common ways to find the distance of two vectors: cosine distance and euclidean distance.
+Cosine distance is equal to 1 minus cosine similarity. No matter which measurement we adapt, they all
+serve for finding similarities between vectors.
+"""
 
 
+def findCosineSimilarity(source_representation, test_representation):
+    a = np.matmul(np.transpose(source_representation), test_representation)
+    b = np.sum(np.multiply(source_representation, source_representation))
+    c = np.sum(np.multiply(test_representation, test_representation))
+    return 1 - (a / (np.sqrt(b) * np.sqrt(c)))
+
+
+def findEuclideanDistance(source_representation, test_representation):
+    euclidean_distance = source_representation - test_representation
+    euclidean_distance = np.sum(np.multiply(euclidean_distance, euclidean_distance))
+    euclidean_distance = np.sqrt(euclidean_distance)
+    return euclidean_distance
+
+'''
+We’ve represented images as vectors and find the similarity measures of two vectors. If both images
+are same person, then measurement should be small. Otherwise, the measurement should be large if two
+images are different person. Here, epsilon value states threshold.
+'''
+
+'''
+Way to find represenation of the image
+img1_representation = vgg_face_descriptor.predict(preprocess_image('1.png'))[0, :]
+img2_representation = vgg_face_descriptor.predict(preprocess_image('2.png'))[0, :]
+'''
+epsilon_cos = 0.40 #cosine similarity
+epsilon_euc = 120 #euclidean distance
+
+def verify_face(img1, img2):
+    img1_representation = vgg_face_descriptor.predict(preprocess_image(img1))[0, :]
+    img2_representation = vgg_face_descriptor.predict(preprocess_image(img2))[0, :]
+
+    cosine_similarity = findCosineSimilarity(img1_representation, img2_representation)
+    euclidean_distance = findEuclideanDistance(img1_representation, img2_representation)
+
+    print("Cosine Similarity", cosine_similarity)
+    print("Euclidean Distance", euclidean_distance)
+
+verify_face("images/2.png", "images/7.png")
